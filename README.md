@@ -20,10 +20,17 @@ live in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ### Getting access (once)
 
-1. Find out your Telegram chat ID by messaging [`@userinfobot`](https://t.me/userinfobot).
-2. Send the ID to whoever operates the bot. They add it to `ALLOWED_CHAT_IDS`
-   in `.env` and restart the bot.
-3. Messages from chats that are not allowlisted are silently ignored.
+1. Ask the operator for the bot link, e.g. `https://t.me/YourBotName`. The bot is
+   created with [@BotFather](https://t.me/BotFather), where its username is set.
+2. Open that link (or search for `@YourBotName` in Telegram) and tap **Start**.
+   This is the chat you will use with the bot.
+3. Find your own chat ID by messaging [`@userinfobot`](https://t.me/userinfobot)
+   and send that ID to the operator.
+4. The operator adds it to `ALLOWED_CHAT_IDS` and restarts the bot. Until then the
+   bot silently ignores your messages, so don't worry if your first tap does
+   nothing.
+5. Once the operator confirms, send `/start <Anzahl>` (e.g. `/start 5`). Telegram's
+   Start button only sends a bare `/start`, which the bot answers with usage help.
 
 ### First-time setup
 
@@ -104,6 +111,10 @@ inline buttons before they are applied.
    ```sh
    npm install
    ```
+
+3. Note the bot's username from [@BotFather](https://t.me/BotFather) — it is not
+   part of `.env` — and share `https://t.me/<username>` with the users you add to
+   `ALLOWED_CHAT_IDS` (see [Getting access](#getting-access-once)).
 
 ## Grocery delivery providers
 

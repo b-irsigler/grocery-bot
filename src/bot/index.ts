@@ -29,6 +29,8 @@ async function main(): Promise<void> {
     { command: "help", description: "Hilfe anzeigen" },
   ]);
   console.log("Grocery-Bot läuft.");
+  const me = await bot.api.getMe();
+  console.log(`Bot-Link: https://t.me/${me.username}`);
   await bot.start();
 }
 
