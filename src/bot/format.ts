@@ -7,7 +7,7 @@ export function formatRecipeList(recipes: RecipeWithIngredients[]): string {
     .join("\n");
 }
 
-export function formatCartResult(result: CartResult): string {
+export function formatCartResult(result: CartResult, shopName: string): string {
   const lines = result.lines
     .map(
       (line) =>
@@ -44,7 +44,7 @@ export function formatCartResult(result: CartResult): string {
   }
   parts.push(
     "",
-    "Bitte prüfe den Warenkorb im Knuspr-Shop und schließe die Bestellung dort ab.",
+    `Bitte prüfe den Warenkorb im ${shopName}-Shop und schließe die Bestellung dort ab.`,
   );
   return parts.join("\n");
 }

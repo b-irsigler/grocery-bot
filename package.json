@@ -11,7 +11,7 @@
     "start": "tsx src/bot/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "knuspr:check": "tsx scripts/knuspr-check.ts"
+    "mcp:check": "tsx scripts/mcp-check.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",

@@ -12,8 +12,8 @@ Functions
 - /remove-recipe <recipe-name>: removes recipe
 - /edit-base: edits the base item list
 - /help: lists all commands with helpful descriptions
-- /add-dont-buy: adds a product from knuspr we never want to have in the cart
-- /remove-dont-buy: removes a product from the list of knuspr prodcuts we never want in our cart
+- /add-dont-buy: adds a product from the delivery service we never want to have in the cart
+- /remove-dont-buy: removes a product from the list of delivery-service products we never want in our cart
 - /list-dont-buy: shows list of products we never want to buy
 
 Recipe schema
@@ -32,7 +32,7 @@ Order
 
 1. The bot and user agree on a recipe list with open options (shrimp vs. chicken)
 2. The bot aggregates all needed ingredients, no amounts are tracked yet, just boolean need
-3. The bot uses Knuspr MCP to find products representing ingredients
+3. The bot uses the configured delivery service's MCP to find products representing ingredients
     1. if product on dont-buy list → hard no
     2. use price/deal as tiebreaker, this also settles shrimp vs. chicken
 4. The math model computes aggregated quantities
@@ -43,7 +43,7 @@ Tech Stack
 - TS/node
 - grammY as bot framework
 - DB: sqlite
-- MCP: official knuspr
+- MCP: Knuspr (official) or Picnic (community), selected via GROCERY_PROVIDER
 - LLM: API key provided in .env
 - Deploy with docker compose
 
@@ -55,13 +55,13 @@ ADRs
 4. The bot only assembles the shopping cart and does not do the checkout/order
 5. The bot is a standalone app deployed on a VPS
 6. A telegram bot is used as intergration is very easy and usability is guaranteed
-7. we want to use the knuspr official MCP server for product select and cart assembly. 
+7. we want to use an MCP server for product select and cart assembly: the official knuspr MCP or the community picnic MCP, selected via GROCERY_PROVIDER. 
 8. A good result of the app highly depends on the math done right. No LLM should be used for computing but the process as described in data and math model above.
 9. If products don’t match the ingredients of recipes, the model makes a best guess for an alternative and notifies the user when sharing the shopping cart.
 10. The product selection tool is asked to favor cheaper products
 11. The cart-assembly workflow is stateless, if it fails the users just run it again
 12. There is state for all /edit and /add routines as they may need feedback from the user via the telegram channel
-13. The cart review happens in the knuspr UI by the user. At that point the modal has done its task.
+13. The cart review happens in the delivery service's UI by the user (knuspr or picnic). At that point the modal has done its task.
 14. The model should check deals on sale in the shop.
 15. All user interactions should be in German.
 16. We don’t worry about concurrency as we assume that the to users will organize offline when to trigger the workflow.

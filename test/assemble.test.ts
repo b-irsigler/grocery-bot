@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { assembleCart } from "../src/cart/assemble";
-import type { KnusprClient, ProductCandidate } from "../src/knuspr/client";
+import type { GroceryClient, ProductCandidate } from "../src/grocery/types";
 import type { BaseItem, DontBuyItem, RecipeWithIngredients } from "../src/db/repo";
 import type { LlmClient } from "../src/llm/types";
 
@@ -22,12 +22,12 @@ const llmPickingFirst: LlmClient = {
   },
 };
 
-function fakeKnuspr(byKeyword: Record<string, ProductCandidate[]>): {
-  client: KnusprClient;
+function fakeGrocery(byKeyword: Record<string, ProductCandidate[]>): {
+  client: GroceryClient;
   added: { productId: string; amount: number }[];
 } {
   const added: { productId: string; amount: number }[] = [];
-  const client: KnusprClient = {
+  const client: GroceryClient = {
     async searchProducts(keyword) {
       return byKeyword[keyword] ?? [];
     },
@@ -55,7 +55,7 @@ const baseItems: BaseItem[] = [
 
 describe("assembleCart", () => {
   it("maps, rounds and adds ingredients plus base items", async () => {
-    const { client, added } = fakeKnuspr({
+    const { client, added } = fakeGrocery({
       zwiebel: [product({ productId: "p-zwiebel", name: "Zwiebeln 500 g", price: 1.29, unitAmount: 500, unitAmountUnit: "gram" })],
       reis: [product({ productId: "p-reis", name: "Basmatireis 500 g", price: 2.49, unitAmount: 500, unitAmountUnit: "gram" })],
       hafermilch: [product({ productId: "p-milch", name: "Hafermilch 1 l", price: 1.99, unitAmount: 1000, unitAmountUnit: "ml" })],
@@ -78,8 +78,8 @@ describe("assembleCart", () => {
   });
 
   it("reports dont-buy blocks and adds nothing for them", async () => {
-    const dontBuy: DontBuyItem[] = [{ id: 1, knusprProductId: "p-reis", name: "Basmatireis 500 g" }];
-    const { client, added } = fakeKnuspr({
+    const dontBuy: DontBuyItem[] = [{ id: 1, productId: "p-reis", name: "Basmatireis 500 g" }];
+    const { client, added } = fakeGrocery({
       zwiebel: [product({ productId: "p-zwiebel", name: "Zwiebeln 500 g", price: 1.29, unitAmount: 500, unitAmountUnit: "gram" })],
       reis: [product({ productId: "p-reis", name: "Basmatireis 500 g", price: 2.49, unitAmount: 500, unitAmountUnit: "gram" })],
       hafermilch: [product({ productId: "p-milch", name: "Hafermilch 1 l", price: 1.99, unitAmount: 1000, unitAmountUnit: "ml" })],

@@ -36,8 +36,17 @@ export function migrate(): void {
 
     CREATE TABLE IF NOT EXISTS dont_buy (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      knuspr_product_id TEXT,
+      product_id TEXT,
       name TEXT NOT NULL
     );
   `);
+
+  const columns = db
+    .prepare("PRAGMA table_info(dont_buy)")
+    .all() as { name: string }[];
+  const hasLegacy = columns.some((column) => column.name === "knuspr_product_id");
+  const hasNew = columns.some((column) => column.name === "product_id");
+  if (hasLegacy && !hasNew) {
+    db.exec("ALTER TABLE dont_buy RENAME COLUMN knuspr_product_id TO product_id;");
+  }
 }

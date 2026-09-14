@@ -15,16 +15,16 @@ function parseNumber(raw: string): number {
 }
 
 export function parsePackageAmount(name: string): PackageAmount | null {
-  const multipack = name.match(/(\d+)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l)\b/i);
+  const multipack = name.match(/(\d+)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*(kg|gr|g|ml|l)\b/i);
   if (multipack) {
     const count = parseNumber(multipack[1] as string);
     const size = parseNumber(multipack[2] as string);
     const rawUnit = (multipack[3] as string).toLowerCase();
     const factor = rawUnit === "kg" || rawUnit === "l" ? 1000 : 1;
-    const unit = rawUnit === "kg" || rawUnit === "g" ? "gram" : "ml";
+    const unit = rawUnit === "kg" || rawUnit === "gr" || rawUnit === "g" ? "gram" : "ml";
     return { amount: count * size * factor, unit };
   }
-  const weight = name.match(/(\d+(?:[.,]\d+)?)\s*(kg|g)\b/i);
+  const weight = name.match(/(\d+(?:[.,]\d+)?)\s*(kg|gr|g)\b/i);
   if (weight) {
     const size = parseNumber(weight[1] as string);
     const isKg = (weight[2] as string).toLowerCase() === "kg";

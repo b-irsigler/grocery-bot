@@ -1,5 +1,5 @@
 import type { LlmClient } from "../llm/types";
-import type { KnusprClient, ProductCandidate } from "../knuspr/client";
+import type { GroceryClient, ProductCandidate } from "../grocery/types";
 import { aggregateIngredients, groupAlternatives } from "../mapping/aggregate";
 import { filterCandidates, pickBestMatch } from "../mapping/match";
 import { roundUpToPackages } from "../mapping/quantity";
@@ -34,7 +34,7 @@ interface ChosenNeed {
 
 export async function assembleCart(
   llm: LlmClient,
-  knuspr: KnusprClient,
+  grocery: GroceryClient,
   recipes: RecipeWithIngredients[],
   baseItems: BaseItem[],
   dontBuy: DontBuyItem[],
@@ -66,7 +66,7 @@ export async function assembleCart(
     const cached = rawCache.get(ingredientId);
     if (cached) return cached;
     const keyword = ingredientId.replace(/-/g, " ");
-    const fetched = await knuspr.searchProducts(keyword, 10);
+    const fetched = await grocery.searchProducts(keyword, 10);
     rawCache.set(ingredientId, fetched);
     return fetched;
   }
@@ -146,7 +146,7 @@ export async function assembleCart(
       source,
       isGuess: entry.isGuess,
     });
-    await knuspr.addToCart(entry.product.productId, amount);
+    await grocery.addToCart(entry.product.productId, amount);
   }
 
   return { lines, blocked };

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { completeJson } from "../llm/json";
 import type { ChatMessage, LlmClient } from "../llm/types";
-import type { ProductCandidate } from "../knuspr/client";
+import type { ProductCandidate } from "../grocery/types";
 import type { DontBuyItem } from "../db/repo";
 
 const MatchSchema = z.object({
@@ -13,7 +13,7 @@ export function isBlocked(product: ProductCandidate, dontBuy: DontBuyItem[]): bo
   const lowerName = product.name.trim().toLowerCase();
   return dontBuy.some(
     (item) =>
-      (item.knusprProductId !== null && item.knusprProductId === product.productId) ||
+      (item.productId !== null && item.productId === product.productId) ||
       item.name.trim().toLowerCase() === lowerName,
   );
 }

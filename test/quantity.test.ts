@@ -5,6 +5,8 @@ describe("parsePackageAmount", () => {
   it("parses grams", () => {
     expect(parsePackageAmount("Basmatireis 500 g")).toEqual({ amount: 500, unit: "gram" });
     expect(parsePackageAmount("Mehl 1kg")).toEqual({ amount: 1000, unit: "gram" });
+    expect(parsePackageAmount("Kartoffeln 1,5 kg")).toEqual({ amount: 1500, unit: "gram" });
+    expect(parsePackageAmount("Mehl 500 gr")).toEqual({ amount: 500, unit: "gram" });
   });
 
   it("parses volume", () => {

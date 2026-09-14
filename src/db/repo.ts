@@ -38,7 +38,7 @@ export interface BaseItem {
 
 export interface DontBuyItem {
   id: number;
-  knusprProductId: string | null;
+  productId: string | null;
   name: string;
 }
 
@@ -66,7 +66,7 @@ interface BaseRow {
 
 interface DontBuyRow {
   id: number;
-  knuspr_product_id: string | null;
+  product_id: string | null;
   name: string;
 }
 
@@ -231,20 +231,20 @@ export function replaceBaseItems(items: { name: string; quantity: number; unit: 
 
 export function listDontBuy(): DontBuyItem[] {
   const rows = db
-    .prepare("SELECT id, knuspr_product_id, name FROM dont_buy ORDER BY name")
+    .prepare("SELECT id, product_id, name FROM dont_buy ORDER BY name")
     .all() as DontBuyRow[];
   return rows.map((row) => ({
     id: row.id,
-    knusprProductId: row.knuspr_product_id,
+    productId: row.product_id,
     name: row.name,
   }));
 }
 
-export function addDontBuy(name: string, knusprProductId: string | null): DontBuyItem {
+export function addDontBuy(name: string, productId: string | null): DontBuyItem {
   const result = db
-    .prepare("INSERT INTO dont_buy (knuspr_product_id, name) VALUES (?, ?)")
-    .run(knusprProductId, name.trim());
-  return { id: Number(result.lastInsertRowid), knusprProductId, name: name.trim() };
+    .prepare("INSERT INTO dont_buy (product_id, name) VALUES (?, ?)")
+    .run(productId, name.trim());
+  return { id: Number(result.lastInsertRowid), productId, name: name.trim() };
 }
 
 export function removeDontBuy(id: number): boolean {
@@ -254,9 +254,9 @@ export function removeDontBuy(id: number): boolean {
 
 export function findDontBuyByName(name: string): DontBuyItem | undefined {
   const row = db
-    .prepare("SELECT id, knuspr_product_id, name FROM dont_buy WHERE lower(name) = lower(?)")
+    .prepare("SELECT id, product_id, name FROM dont_buy WHERE lower(name) = lower(?)")
     .get(name.trim()) as DontBuyRow | undefined;
   return row
-    ? { id: row.id, knusprProductId: row.knuspr_product_id, name: row.name }
+    ? { id: row.id, productId: row.product_id, name: row.name }
     : undefined;
 }

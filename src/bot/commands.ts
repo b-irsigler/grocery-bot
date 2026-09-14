@@ -1,5 +1,6 @@
 import { Bot, InlineKeyboard, type Context } from "grammy";
-import { createKnusprClient } from "../knuspr/client";
+import { config } from "../config";
+import { createGroceryClient } from "../grocery";
 import type { LlmClient } from "../llm/types";
 import { assembleCart } from "../cart/assemble";
 import {
@@ -231,12 +232,12 @@ async function runCart(
   if (chatId === undefined) return;
   clearPending(chatId);
   await ctx.reply("Ich suche passende Produkte und stelle den Warenkorb zusammen …");
-  const knuspr = await createKnusprClient();
+  const grocery = await createGroceryClient();
   try {
-    const result = await assembleCart(llm, knuspr, recipes, listBaseItems(), listDontBuy());
-    await ctx.reply(formatCartResult(result));
+    const result = await assembleCart(llm, grocery, recipes, listBaseItems(), listDontBuy());
+    await ctx.reply(formatCartResult(result, config.shopName));
   } finally {
-    await knuspr.close().catch(() => undefined);
+    await grocery.close().catch(() => undefined);
   }
 }
 

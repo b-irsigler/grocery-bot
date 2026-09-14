@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { bestByPrice, filterCandidates, isBlocked, pickBestMatch } from "../src/mapping/match";
-import type { ProductCandidate } from "../src/knuspr/client";
+import type { ProductCandidate } from "../src/grocery/types";
 import type { DontBuyItem } from "../src/db/repo";
 import type { LlmClient } from "../src/llm/types";
 
@@ -21,8 +21,8 @@ const llmReturning = (text: string): LlmClient => ({ complete: async () => text 
 describe("dont-buy filtering", () => {
   it("blocks by product id and by exact name", () => {
     const dontBuy: DontBuyItem[] = [
-      { id: 1, knusprProductId: "p1", name: "Egal" },
-      { id: 2, knusprProductId: null, name: "Billig-Cola" },
+      { id: 1, productId: "p1", name: "Egal" },
+      { id: 2, productId: null, name: "Billig-Cola" },
     ];
     expect(isBlocked(product({ productId: "p1" }), dontBuy)).toBe(true);
     expect(isBlocked(product({ productId: "p9", name: "billig-cola" }), dontBuy)).toBe(true);

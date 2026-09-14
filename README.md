@@ -1,13 +1,17 @@
 # grocery-bot
 
 A Telegram bot that plans a week of meals for a small family and assembles the
-matching grocery cart on [Knuspr](https://www.knuspr.de) — so the only thing
-left to do is review the cart and check out.
+matching grocery cart on a delivery service — [Knuspr](https://www.knuspr.de) or
+[Picnic](https://picnic.app) — so the only thing left to do is review the cart
+and check out.
 
 The bot picks a diverse set of recipes from a personal recipe pool, aggregates
 ingredients across recipes (conventional math, no LLM), maps them to real
-products via the official Knuspr MCP server, adds a weekly base assortment,
-respects a dont-buy list, and shares the finished cart in the chat.
+products via the configured MCP server, adds a weekly base assortment, respects
+a dont-buy list, and shares the finished cart in the chat.
+
+The delivery provider is pluggable and selected with `GROCERY_PROVIDER`
+(`knuspr` or `picnic`); one provider is active at a time.
 
 All user interaction is in German. Architecture decisions and the full design
 live in [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -40,11 +44,11 @@ inline buttons before they are applied.
    ✅ Übernehmen, ✏️ Ändern, ❌ Abbrechen.
 3. Choose ✏️ Ändern and type what you want different in plain German to get
    a new proposal.
-4. On ✅ Übernehmen, the bot fills the Knuspr cart: cheaper products and deals
+4. On ✅ Übernehmen, the bot fills the provider cart: cheaper products and deals
    are preferred, the dont-buy list is respected, and uncertain product
    matches are flagged in the summary it posts.
-5. Review the cart in the Knuspr app and check out with your payment method —
-   the bot never places the order itself.
+5. Review the cart in the Knuspr/Picnic app and check out with your payment
+   method — the bot never places the order itself.
 
 ## Commands
 
@@ -69,7 +73,8 @@ inline buttons before they are applied.
 - A Telegram bot token ([@BotFather](https://t.me/BotFather))
 - An API key for any OpenAI-compatible chat-completions endpoint
   (e.g. OpenAI or Scaleway Generative APIs)
-- Knuspr account credentials
+- Knuspr account credentials (when `GROCERY_PROVIDER=knuspr`) or Picnic account
+  credentials (when `GROCERY_PROVIDER=picnic`)
 
 ## Setup
 
@@ -86,8 +91,12 @@ inline buttons before they are applied.
    | `LLM_API_KEY` | API key for the LLM endpoint |
    | `LLM_BASE_URL` | OpenAI-compatible base URL, e.g. `https://api.openai.com/v1` |
    | `LLM_MODEL` | Chat model name, e.g. `mistral-small-3.2-24b-instruct-2506` on Scaleway |
-   | `KNUSPR_MCP_URL` | Knuspr MCP endpoint (defaults to `https://mcp.knuspr.de/mcp`) |
-   | `KNUSPR_EMAIL` / `KNUSPR_PASSWORD` | Knuspr account credentials |
+   | `GROCERY_PROVIDER` | `knuspr` (default) or `picnic` |
+   | `KNUSPR_MCP_URL` | Knuspr MCP endpoint (defaults to `https://mcp.knuspr.de/mcp`), when `GROCERY_PROVIDER=knuspr` |
+   | `KNUSPR_EMAIL` / `KNUSPR_PASSWORD` | Knuspr account credentials, when `GROCERY_PROVIDER=knuspr` |
+   | `PICNIC_MCP_COMMAND` / `PICNIC_MCP_ARGS` | Picnic MCP command (defaults to `npx -y mcp-picnic@1.15.1`), when `GROCERY_PROVIDER=picnic` |
+   | `PICNIC_USERNAME` / `PICNIC_PASSWORD` | Picnic account credentials, when `GROCERY_PROVIDER=picnic` |
+   | `PICNIC_COUNTRY_CODE` | Picnic country, `DE` (default) or `NL` |
    | `DB_PATH` | SQLite path (defaults to `./data/grocery.db`) |
 
 2. Install dependencies:
@@ -95,6 +104,56 @@ inline buttons before they are applied.
    ```sh
    npm install
    ```
+
+## Grocery delivery providers
+
+The bot supports two delivery services and uses exactly one at a time, selected
+with `GROCERY_PROVIDER` (`knuspr` or `picnic`). In both cases the assembled cart
+is reviewed and checked out by hand in the provider's own app — the bot never
+places an order.
+
+### Knuspr (default)
+
+Uses Knuspr's **official** MCP server, authenticated with your Knuspr account
+credentials:
+
+```dotenv
+GROCERY_PROVIDER=knuspr
+KNUSPR_MCP_URL=https://mcp.knuspr.de/mcp
+KNUSPR_EMAIL=you@example.com
+KNUSPR_PASSWORD=...
+```
+
+### Picnic
+
+Picnic has no official MCP server. This uses the **unofficial community** server
+[`mcp-picnic`](https://github.com/ivo-toby/mcp-picnic), which talks to the same
+private, reverse-engineered API as the Picnic app. It is not affiliated with
+Picnic and can stop working if Picnic changes that API.
+
+```dotenv
+GROCERY_PROVIDER=picnic
+PICNIC_USERNAME=you@example.com
+PICNIC_PASSWORD=...
+PICNIC_COUNTRY_CODE=DE
+PICNIC_MCP_ARGS=-y mcp-picnic@1.15.1
+```
+
+- The server runs via `npx`, so the first run downloads it and needs network
+  access. To pre-warm the cache: `npx -y mcp-picnic@1.15.1 --version`.
+- Pin the version in `PICNIC_MCP_ARGS` (as above) to keep behavior reproducible.
+- Picnic supports `DE` and `NL` for `PICNIC_COUNTRY_CODE`.
+- If the account has 2FA enabled, automatic login may require a one-time
+  verification code that the bot cannot prompt for. Either disable 2FA for the
+  account or complete the 2FA flow once with another MCP client (for example the
+  MCP inspector) so a session is cached.
+- Product IDs are provider-specific. The dont-buy list stores an optional ID;
+  entries created with `/add_dont_buy` are name-based and work across providers.
+  After switching providers, a Knuspr-specific ID entry would not match a Picnic
+  product.
+
+To switch providers, change `GROCERY_PROVIDER`, restart the bot, and run
+`npm run mcp:check` to confirm the new provider's MCP tools are reachable.
 
 ## Run
 
@@ -114,7 +173,7 @@ docker compose up -d --build
 ```sh
 npm run typecheck   # tsc --noEmit
 npm test            # vitest run
-npm run knuspr:check
+npm run mcp:check   # print the configured provider's MCP tools/list
 ```
 
 See [WORKFLOW.md](WORKFLOW.md) for the two-model planning workflow used to
