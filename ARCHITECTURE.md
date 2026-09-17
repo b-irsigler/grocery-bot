@@ -22,20 +22,27 @@ All recipes are saved to feed two adults and one small child. No scaling has to 
 
 Data model
 
-Every ingredient is saved as {ingredient_id, quantity, unit} where unit is one of piece, clove, gram, ml, package. When /add-recipe or /edit-recipe are called, the data model should be validated that the unit it correct.
+Every ingredient is saved as `{ingredient_id, amount}` plus the verbatim `amount_text`. An amount is a small discriminated union instead of a fixed unit enum:
+
+- `measured` – `{value, measure: gram|ml}` for 500 g, 1 l, 2 EL (~30 ml)
+- `count`    – `{value, item}` for "1 Karotte", "3 Zehen" (item aliases normalized, e.g. Zehen/Knoblauchzehe → zehe)
+- `container`– `{value}` for "1 Packung", "eine halbe Dose"
+- `unquantified` – for "eine Prise", "etwas", "nach Geschmack"
+
+The extraction LLM classifies the amount expression and copies it verbatim; it never converts it into fake units. When /add-recipe or /edit-recipe are called, the amount is validated and repaired (inconsistent fields fall back to `unquantified`).
 
 Math model
 
-For the selected recipes, do a unit conversion (an onion, three cloves of garlic, a package of vegan crunchy chicken etc.) and aggregate the same ingredients across recipes. Then there is a conventional function, not an LLM task, to aggregate the same ingredient across recipes to a total quantity for each ingredient needed. The resulting quantities will most probably not fit multiples of package sizes, in that case round up. 
+The item decides how many packs to buy given the actual product size, so normalization happens late, at match time. A conventional function first resolves the pack count deterministically when the need and the pack size are comparable (measured vs. mass/volume, count vs. piece/multipack, container rounded up, unquantified → one pack). Only when the units are not comparable does the LLM estimate a pack count. Among products that the matcher deems acceptable, the cheapest total (packs × price) wins.
 
 Order
 
 1. The bot and user agree on a recipe list with open options (shrimp vs. chicken)
-2. The bot aggregates all needed ingredients, no amounts are tracked yet, just boolean need
+2. The bot aggregates all needed ingredients per amount kind (same ingredient + same kind/measure/item are summed)
 3. The bot uses the configured delivery service's MCP to find products representing ingredients
     1. if product on dont-buy list → hard no
-    2. use price/deal as tiebreaker, this also settles shrimp vs. chicken
-4. The math model computes aggregated quantities
+    2. choose the cheapest total (packs × price) among acceptable products; this also settles shrimp vs. chicken
+4. The math model resolves pack counts deterministically, falling back to an LLM estimate only for incomparable units
 5. shoppping cart can be assembled
 
 Tech Stack
@@ -56,9 +63,9 @@ ADRs
 5. The bot is a standalone app deployed on a VPS
 6. A telegram bot is used as intergration is very easy and usability is guaranteed
 7. we want to use an MCP server for product select and cart assembly: the official knuspr MCP or the community picnic MCP, selected via GROCERY_PROVIDER. 
-8. A good result of the app highly depends on the math done right. No LLM should be used for computing but the process as described in data and math model above.
+8. A good result of the app highly depends on the math done right. The LLM classifies amounts and estimates pack counts only where units are not comparable; all comparable cases are computed deterministically.
 9. If products don’t match the ingredients of recipes, the model makes a best guess for an alternative and notifies the user when sharing the shopping cart.
-10. The product selection tool is asked to favor cheaper products
+10. The product selection tool is asked to favor cheaper products; among acceptable products the cheapest total including the computed pack count wins.
 11. The cart-assembly workflow is stateless, if it fails the users just run it again
 12. There is state for all /edit and /add routines as they may need feedback from the user via the telegram channel
 13. The cart review happens in the delivery service's UI by the user (knuspr or picnic). At that point the modal has done its task.
@@ -67,4 +74,7 @@ ADRs
 16. We don’t worry about concurrency as we assume that the to users will organize offline when to trigger the workflow.
 17. All commands which are performed with natural language always ask for validation with the planned change via the telegram channel
 18. If the only available product coincides with one from the dont-buy list, notify the use
-19. Validation for units is only needed that the picked unit is part of the hard-coded list. We can assume that users don’t match ingredients with awkward units like flour and clove. No validation needed at that point.
+19. Amounts use a small set of kinds (measured, count, container, unquantified) instead of a fixed unit list. Validation only repairs inconsistent extractions (falling back to unquantified); no semantic unit/ingredient checks are done.
+20. Pack counts are normalised late, at match time, because whether "1 Karotte" means one piece or a 1 kg bag can only be decided with the actual product in hand.
+21. Count items are alias-normalised (Zehen/Knoblauchzehe → zehe, Stück/Stk → stueck, ...) so synonymous counts aggregate across recipes.
+22. Among products the matcher deems acceptable, the cheapest total (packs × price) is chosen; ties fall back to price/deal ordering.

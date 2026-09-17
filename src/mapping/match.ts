@@ -1,13 +1,16 @@
 import { z } from "zod";
+import { describeAmount, type Amount } from "../amounts";
 import { completeJson } from "../llm/json";
 import type { ChatMessage, LlmClient } from "../llm/types";
 import type { ProductCandidate } from "../grocery/types";
 import type { DontBuyItem } from "../db/repo";
+import { resolvePackages } from "./quantity";
 
-const MatchSchema = z.object({
-  productId: z.string(),
-  isGuess: z.boolean(),
-});
+export interface IngredientNeed {
+  ingredientId: string;
+  amount: Amount;
+  amountText: string;
+}
 
 export function isBlocked(product: ProductCandidate, dontBuy: DontBuyItem[]): boolean {
   const lowerName = product.name.trim().toLowerCase();
@@ -34,21 +37,79 @@ export function bestByPrice(candidates: ProductCandidate[]): ProductCandidate | 
   return sorted[0] ?? null;
 }
 
-export interface ProductMatch {
+export interface ProductChoice {
   product: ProductCandidate;
+  packs: number;
   isGuess: boolean;
+  total: number;
 }
 
-export async function pickBestMatch(
-  llm: LlmClient,
-  ingredientId: string,
-  candidates: ProductCandidate[],
-): Promise<ProductMatch | null> {
-  if (candidates.length === 0) return null;
-  if (candidates.length === 1) {
-    const single = candidates[0] ?? null;
-    return single === null ? null : { product: single, isGuess: false };
+function coerceInt(value: unknown): unknown {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isNaN(parsed)) return parsed;
   }
+  return value;
+}
+
+const PacksSchema = z.object({
+  packs: z.preprocess(coerceInt, z.number().int().min(1).max(99)),
+});
+
+const MatchesSchema = z.object({
+  matches: z.array(
+    z.object({
+      productId: z.string(),
+      isGuess: z.boolean(),
+    }),
+  ),
+});
+
+function formatSize(product: ProductCandidate): string {
+  if (product.unitAmount === null || product.unitAmountUnit === null) return "";
+  const unit =
+    product.unitAmountUnit === "gram"
+      ? "g"
+      : product.unitAmountUnit === "ml"
+        ? "ml"
+        : "Stück";
+  return ` (${product.unitAmount} ${unit})`;
+}
+
+export async function resolvePackagesWithLlm(
+  llm: LlmClient,
+  need: IngredientNeed,
+  product: ProductCandidate,
+): Promise<number> {
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content:
+        "Du hilfst beim Wocheneinkauf und schätzt Packungsmengen. Antworte NUR mit JSON.",
+    },
+    {
+      role: "user",
+      content:
+        `Ein Rezept braucht: ${need.amountText} ${need.ingredientId.replace(/-/g, " ")} ` +
+        `(${describeAmount(need.amount)}).\n` +
+        `Produkt: ${product.name}${formatSize(product)}.\n` +
+        `Wie viele Packungen dieses Produkts sind nötig? Antworte: {"packs": 1}`,
+    },
+  ];
+  try {
+    const parsed = await completeJson(llm, PacksSchema, messages, { temperature: 0 });
+    return parsed.packs;
+  } catch {
+    return 1;
+  }
+}
+
+async function matchCandidates(
+  llm: LlmClient,
+  need: IngredientNeed,
+  candidates: ProductCandidate[],
+): Promise<{ productId: string; isGuess: boolean }[]> {
   const list = candidates
     .map(
       (candidate) =>
@@ -61,18 +122,84 @@ export async function pickBestMatch(
     {
       role: "system",
       content:
-        "Du bist ein deutscher Lebensmittel-Einkaufsassistent. Wähle das Produkt, das die Zutat am besten trifft. Wenn kein Kandidat die Zutat wirklich trifft, wähle den nächstbesten Ersatz und setze isGuess auf true. Antworte NUR mit JSON.",
+        "Du bist ein deutscher Lebensmittel-Einkaufsassistent. Antworte NUR mit JSON.",
     },
     {
       role: "user",
-      content: `Zutat: "${ingredientId.replace(/-/g, " ")}"\n\nKandidaten:\n${list}\n\nAntworte mit {"productId": "...", "isGuess": false}`,
+      content:
+        `Zutat: "${need.ingredientId.replace(/-/g, " ")}" (${describeAmount(need.amount)})\n\n` +
+        `Kandidaten:\n${list}\n\n` +
+        'Liste ALLE Kandidaten, die dieselbe Zutat darstellen, als ' +
+        '{"matches":[{"productId":"...","isGuess":false}]}. ' +
+        "Verschiedene Packungsgrößen oder Marken derselben Zutat gehören dazu " +
+        "(der Preis entscheidet später). isGuess true nur für echte Ersatzprodukte, " +
+        "also wenn die Zutat selbst nicht dabei ist. Maximal 5.",
     },
   ];
-  const result = await completeJson(llm, MatchSchema, messages, { temperature: 0 });
-  const found = candidates.find((candidate) => candidate.productId === result.productId);
-  if (found) {
-    return { product: found, isGuess: result.isGuess };
+  try {
+    const parsed = await completeJson(llm, MatchesSchema, messages, { temperature: 0 });
+    return parsed.matches;
+  } catch {
+    return [];
   }
+}
+
+// Chooses a product and pack count. Among equally acceptable candidates the
+// cheapest total (packs × price) wins; pack counts are deterministic where the
+// need and pack size are comparable and otherwise estimated by the LLM.
+export async function chooseProduct(
+  llm: LlmClient,
+  need: IngredientNeed,
+  candidates: ProductCandidate[],
+): Promise<ProductChoice | null> {
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) {
+    const product = candidates[0] as ProductCandidate;
+    const resolution = resolvePackages(need.amount, product);
+    const packs = resolution.exact
+      ? resolution.packs
+      : await resolvePackagesWithLlm(llm, need, product);
+    return { product, packs, isGuess: false, total: packs * product.price };
+  }
+
+  const matches = await matchCandidates(llm, need, candidates);
+  const valid = matches.flatMap((match) => {
+    const product = candidates.find((candidate) => candidate.productId === match.productId);
+    return product ? [{ match, product }] : [];
+  });
+
+  const exact: ProductChoice[] = [];
+  for (const entry of valid) {
+    const resolution = resolvePackages(need.amount, entry.product);
+    if (resolution.exact) {
+      exact.push({
+        product: entry.product,
+        packs: resolution.packs,
+        isGuess: entry.match.isGuess,
+        total: resolution.packs * entry.product.price,
+      });
+    }
+  }
+  if (exact.length > 0) {
+    return exact.reduce((best, current) => (current.total < best.total ? current : best));
+  }
+
+  const top = valid[0];
+  if (top) {
+    const packs = await resolvePackagesWithLlm(llm, need, top.product);
+    return {
+      product: top.product,
+      packs,
+      isGuess: top.match.isGuess,
+      total: packs * top.product.price,
+    };
+  }
+
   const fallback = bestByPrice(candidates);
-  return fallback === null ? null : { product: fallback, isGuess: true };
+  if (!fallback) return null;
+  const resolution = resolvePackages(need.amount, fallback);
+  const packs = resolution.exact
+    ? resolution.packs
+    : await resolvePackagesWithLlm(llm, need, fallback);
+  return { product: fallback, packs, isGuess: true, total: packs * fallback.price };
 }

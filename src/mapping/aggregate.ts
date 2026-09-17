@@ -1,16 +1,11 @@
-import { convertClovesToPieces, type Unit } from "../units";
+import { amountKey, type Amount } from "../amounts";
 import type { RecipeIngredient } from "../db/repo";
 
 export interface NeedLine {
   ingredientId: string;
-  quantity: number;
-  unit: Unit;
-}
-
-export interface IngredientNeed {
-  ingredientId: string;
-  quantity: number;
-  unit: Unit;
+  amount: Amount;
+  amountText: string;
+  source: "recipe" | "base";
 }
 
 export interface AlternativeGroup {
@@ -19,25 +14,44 @@ export interface AlternativeGroup {
   variants: RecipeIngredient[];
 }
 
-export function aggregateIngredients(ingredients: IngredientNeed[]): NeedLine[] {
+function addAmount(current: Amount, addition: Amount): Amount {
+  if (current.kind === "measured" && addition.kind === "measured") {
+    return { kind: "measured", value: current.value + addition.value, measure: current.measure };
+  }
+  if (current.kind === "count" && addition.kind === "count") {
+    return { kind: "count", value: current.value + addition.value, item: current.item };
+  }
+  if (current.kind === "container" && addition.kind === "container") {
+    return { kind: "container", value: current.value + addition.value };
+  }
+  return current;
+}
+
+export function aggregateIngredients(needs: NeedLine[]): NeedLine[] {
   const totals = new Map<string, NeedLine>();
-  for (const ingredient of ingredients) {
-    const converted = convertClovesToPieces(ingredient.quantity, ingredient.unit);
-    const key = `${ingredient.ingredientId}\u0000${converted.unit}`;
+  for (const need of needs) {
+    const key = `${need.ingredientId}\u0000${amountKey(need.amount)}`;
     const existing = totals.get(key);
     if (existing) {
-      existing.quantity += converted.quantity;
+      existing.amount = addAmount(existing.amount, need.amount);
+      if (need.source === "recipe") {
+        existing.source = "recipe";
+      }
+      if (!existing.amountText.includes(need.amountText)) {
+        existing.amountText = `${existing.amountText}, ${need.amountText}`;
+      }
     } else {
       totals.set(key, {
-        ingredientId: ingredient.ingredientId,
-        quantity: converted.quantity,
-        unit: converted.unit,
+        ingredientId: need.ingredientId,
+        amount: need.amount,
+        amountText: need.amountText,
+        source: need.source,
       });
     }
   }
   return [...totals.values()].sort((a, b) => {
     const byIngredient = a.ingredientId.localeCompare(b.ingredientId);
-    return byIngredient !== 0 ? byIngredient : a.unit.localeCompare(b.unit);
+    return byIngredient !== 0 ? byIngredient : amountKey(a.amount).localeCompare(amountKey(b.amount));
   });
 }
 

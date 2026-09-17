@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { slugify } from "../util/slug";
-import type { Unit } from "../units";
+import { amountFromColumns, amountToColumns, type Amount } from "../amounts";
 import { db } from "./index";
 
 export interface Recipe {
@@ -13,8 +13,8 @@ export interface RecipeIngredient {
   id: string;
   recipeId: string;
   ingredientId: string;
-  quantity: number;
-  unit: Unit;
+  amount: Amount;
+  amountText: string;
   altGroup: string | null;
 }
 
@@ -24,16 +24,15 @@ export interface RecipeWithIngredients extends Recipe {
 
 export interface IngredientInput {
   ingredientId: string;
-  quantity: number;
-  unit: Unit;
+  amount: Amount;
+  amountText: string;
   altGroup: string | null;
 }
 
 export interface BaseItem {
   id: string;
   name: string;
-  quantity: number;
-  unit: Unit;
+  amount: Amount;
 }
 
 export interface DontBuyItem {
@@ -52,16 +51,21 @@ interface IngredientRow {
   id: string;
   recipe_id: string;
   ingredient_id: string;
-  quantity: number;
-  unit: Unit;
+  amount_kind: string;
+  amount_value: number | null;
+  amount_measure: string | null;
+  amount_item: string | null;
+  amount_text: string;
   alt_group: string | null;
 }
 
 interface BaseRow {
   id: string;
   name: string;
-  quantity: number;
-  unit: Unit;
+  amount_kind: string;
+  amount_value: number | null;
+  amount_measure: string | null;
+  amount_item: string | null;
 }
 
 interface DontBuyRow {
@@ -79,8 +83,13 @@ function rowToIngredient(row: IngredientRow): RecipeIngredient {
     id: row.id,
     recipeId: row.recipe_id,
     ingredientId: row.ingredient_id,
-    quantity: row.quantity,
-    unit: row.unit,
+    amount: amountFromColumns(
+      row.amount_kind,
+      row.amount_value,
+      row.amount_measure,
+      row.amount_item,
+    ),
+    amountText: row.amount_text,
     altGroup: row.alt_group,
   };
 }
@@ -95,7 +104,7 @@ export function listRecipes(): Recipe[] {
 export function listRecipeIngredients(recipeId: string): RecipeIngredient[] {
   const rows = db
     .prepare(
-      "SELECT id, recipe_id, ingredient_id, quantity, unit, alt_group FROM recipe_ingredients WHERE recipe_id = ? ORDER BY rowid",
+      "SELECT id, recipe_id, ingredient_id, amount_kind, amount_value, amount_measure, amount_item, amount_text, alt_group FROM recipe_ingredients WHERE recipe_id = ? ORDER BY rowid",
     )
     .all(recipeId) as IngredientRow[];
   return rows.map(rowToIngredient);
@@ -119,15 +128,19 @@ export function getRecipeByTitle(title: string): RecipeWithIngredients | undefin
 
 function insertIngredients(recipeId: string, ingredients: IngredientInput[]): void {
   const statement = db.prepare(
-    "INSERT INTO recipe_ingredients (id, recipe_id, ingredient_id, quantity, unit, alt_group) VALUES (?, ?, ?, ?, ?, ?)",
+    "INSERT INTO recipe_ingredients (id, recipe_id, ingredient_id, amount_kind, amount_value, amount_measure, amount_item, amount_text, alt_group) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
   );
   for (const ingredient of ingredients) {
+    const columns = amountToColumns(ingredient.amount);
     statement.run(
       randomUUID(),
       recipeId,
       ingredient.ingredientId,
-      ingredient.quantity,
-      ingredient.unit,
+      columns.kind,
+      columns.value,
+      columns.measure,
+      columns.item,
+      ingredient.amountText,
       ingredient.altGroup,
     );
   }
@@ -190,25 +203,29 @@ export function deleteRecipe(id: string): boolean {
 
 export function listBaseItems(): BaseItem[] {
   const rows = db
-    .prepare("SELECT id, name, quantity, unit FROM base_items ORDER BY rowid")
+    .prepare(
+      "SELECT id, name, amount_kind, amount_value, amount_measure, amount_item FROM base_items ORDER BY rowid",
+    )
     .all() as BaseRow[];
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
-    quantity: row.quantity,
-    unit: row.unit,
+    amount: amountFromColumns(
+      row.amount_kind,
+      row.amount_value,
+      row.amount_measure,
+      row.amount_item,
+    ),
   }));
 }
 
-export function addBaseItem(name: string, quantity: number, unit: Unit): BaseItem {
+export function addBaseItem(name: string, amount: Amount): BaseItem {
   const id = randomUUID();
-  db.prepare("INSERT INTO base_items (id, name, quantity, unit) VALUES (?, ?, ?, ?)").run(
-    id,
-    name.trim(),
-    quantity,
-    unit,
-  );
-  return { id, name: name.trim(), quantity, unit };
+  const columns = amountToColumns(amount);
+  db.prepare(
+    "INSERT INTO base_items (id, name, amount_kind, amount_value, amount_measure, amount_item) VALUES (?, ?, ?, ?, ?, ?)",
+  ).run(id, name.trim(), columns.kind, columns.value, columns.measure, columns.item);
+  return { id, name: name.trim(), amount };
 }
 
 export function deleteBaseItem(id: string): boolean {
@@ -216,14 +233,22 @@ export function deleteBaseItem(id: string): boolean {
   return result.changes > 0;
 }
 
-export function replaceBaseItems(items: { name: string; quantity: number; unit: Unit }[]): void {
+export function replaceBaseItems(items: { name: string; amount: Amount }[]): void {
   const transaction = db.transaction(() => {
     db.prepare("DELETE FROM base_items").run();
     const statement = db.prepare(
-      "INSERT INTO base_items (id, name, quantity, unit) VALUES (?, ?, ?, ?)",
+      "INSERT INTO base_items (id, name, amount_kind, amount_value, amount_measure, amount_item) VALUES (?, ?, ?, ?, ?, ?)",
     );
     for (const item of items) {
-      statement.run(randomUUID(), item.name.trim(), item.quantity, item.unit);
+      const columns = amountToColumns(item.amount);
+      statement.run(
+        randomUUID(),
+        item.name.trim(),
+        columns.kind,
+        columns.value,
+        columns.measure,
+        columns.item,
+      );
     }
   });
   transaction();

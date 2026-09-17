@@ -1,11 +1,22 @@
 import type { LlmClient } from "../llm/types";
 import type { GroceryClient, ProductCandidate } from "../grocery/types";
-import { aggregateIngredients, groupAlternatives } from "../mapping/aggregate";
-import { filterCandidates, pickBestMatch } from "../mapping/match";
-import { roundUpToPackages } from "../mapping/quantity";
+import { describeAmount } from "../amounts";
+import { aggregateIngredients, groupAlternatives, type NeedLine } from "../mapping/aggregate";
+import {
+  chooseProduct,
+  filterCandidates,
+  resolvePackagesWithLlm,
+  type IngredientNeed,
+  type ProductChoice,
+} from "../mapping/match";
+import { resolvePackages } from "../mapping/quantity";
 import { slugify } from "../util/slug";
-import type { Unit } from "../units";
-import type { BaseItem, DontBuyItem, RecipeIngredient, RecipeWithIngredients } from "../db/repo";
+import type {
+  BaseItem,
+  DontBuyItem,
+  RecipeIngredient,
+  RecipeWithIngredients,
+} from "../db/repo";
 
 export interface CartLine {
   ingredientId: string;
@@ -25,11 +36,13 @@ export interface CartResult {
   blocked: BlockedLine[];
 }
 
-interface ChosenNeed {
-  ingredientId: string;
-  quantity: number;
-  unit: Unit;
-  source: "recipe" | "base";
+function needOf(ingredient: RecipeIngredient): NeedLine {
+  return {
+    ingredientId: ingredient.ingredientId,
+    amount: ingredient.amount,
+    amountText: ingredient.amountText,
+    source: "recipe",
+  };
 }
 
 export async function assembleCart(
@@ -43,17 +56,12 @@ export async function assembleCart(
     recipes.map((recipe) => ({ id: recipe.id, ingredients: recipe.ingredients })),
   );
 
-  const chosen: ChosenNeed[] = [
-    ...mandatory.map((ingredient) => ({
-      ingredientId: ingredient.ingredientId,
-      quantity: ingredient.quantity,
-      unit: ingredient.unit,
-      source: "recipe" as const,
-    })),
+  const chosen: NeedLine[] = [
+    ...mandatory.map(needOf),
     ...baseItems.map((item) => ({
       ingredientId: slugify(item.name),
-      quantity: item.quantity,
-      unit: item.unit,
+      amount: item.amount,
+      amountText: describeAmount(item.amount),
       source: "base" as const,
     })),
   ];
@@ -81,24 +89,14 @@ export async function assembleCart(
   }
 
   for (const group of groups) {
-    let winner: {
-      ingredient: RecipeIngredient;
-      product: ProductCandidate;
-      isGuess: boolean;
-      total: number;
-    } | null = null;
+    let winner: { need: NeedLine; choice: ProductChoice } | null = null;
     for (const variant of group.variants) {
       const candidates = await allowedCandidates(variant.ingredientId);
       if (candidates.length === 0) continue;
-      const match = await pickBestMatch(llm, variant.ingredientId, candidates);
-      if (!match) continue;
-      const amount = roundUpToPackages(
-        { quantity: variant.quantity, unit: variant.unit },
-        match.product,
-      );
-      const total = match.product.price * amount;
-      if (!winner || total < winner.total) {
-        winner = { ingredient: variant, product: match.product, isGuess: match.isGuess, total };
+      const choice = await chooseProduct(llm, needOf(variant), candidates);
+      if (!choice) continue;
+      if (!winner || choice.total < winner.choice.total) {
+        winner = { need: needOf(variant), choice };
       }
     }
     if (!winner) {
@@ -108,15 +106,10 @@ export async function assembleCart(
       }
       continue;
     }
-    chosen.push({
-      ingredientId: winner.ingredient.ingredientId,
-      quantity: winner.ingredient.quantity,
-      unit: winner.ingredient.unit,
-      source: "recipe",
-    });
-    productCache.set(winner.ingredient.ingredientId, {
-      product: winner.product,
-      isGuess: winner.isGuess,
+    chosen.push(winner.need);
+    productCache.set(winner.need.ingredientId, {
+      product: winner.choice.product,
+      isGuess: winner.choice.isGuess,
     });
   }
 
@@ -131,19 +124,22 @@ export async function assembleCart(
         recordBlock(need.ingredientId, await rawCandidates(need.ingredientId));
         continue;
       }
-      entry = await pickBestMatch(llm, need.ingredientId, candidates);
-      if (!entry) {
+      const choice = await chooseProduct(llm, need, candidates);
+      if (!choice) {
         recordBlock(need.ingredientId, await rawCandidates(need.ingredientId));
         continue;
       }
+      entry = { product: choice.product, isGuess: choice.isGuess };
     }
-    const amount = roundUpToPackages(need, entry.product);
-    const source = chosen.find((item) => item.ingredientId === need.ingredientId)?.source ?? "recipe";
+    const resolution = resolvePackages(need.amount, entry.product);
+    const amount = resolution.exact
+      ? resolution.packs
+      : await resolvePackagesWithLlm(llm, need, entry.product);
     lines.push({
       ingredientId: need.ingredientId,
       product: entry.product,
       amount,
-      source,
+      source: need.source,
       isGuess: entry.isGuess,
     });
     await grocery.addToCart(entry.product.productId, amount);

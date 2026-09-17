@@ -1,5 +1,23 @@
+import { describeAmount, type Amount } from "../amounts";
 import type { CartResult } from "../cart/assemble";
 import type { RecipeWithIngredients } from "../db/repo";
+
+export interface IngredientLike {
+  ingredientId: string;
+  amount: Amount;
+  amountText: string;
+}
+
+export function formatIngredients(ingredients: IngredientLike[]): string {
+  return ingredients
+    .map(
+      (ingredient) =>
+        `${ingredient.amountText} ${ingredient.ingredientId.replace(/-/g, " ")} (${describeAmount(
+          ingredient.amount,
+        )})`,
+    )
+    .join("\n");
+}
 
 export function formatRecipeList(recipes: RecipeWithIngredients[]): string {
   return recipes

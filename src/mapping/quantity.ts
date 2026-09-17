@@ -1,4 +1,4 @@
-import { isCountable, type Unit } from "../units";
+import type { Amount } from "../amounts";
 
 export interface PackageAmount {
   amount: number;
@@ -8,6 +8,11 @@ export interface PackageAmount {
 export interface PackageLike {
   unitAmount: number | null;
   unitAmountUnit: "gram" | "ml" | "piece" | null;
+}
+
+export interface PackResolution {
+  packs: number;
+  exact: boolean;
 }
 
 function parseNumber(raw: string): number {
@@ -43,21 +48,25 @@ export function parsePackageAmount(name: string): PackageAmount | null {
   return null;
 }
 
-export function roundUpToPackages(
-  need: { quantity: number; unit: Unit },
-  product: PackageLike,
-): number {
-  if (isCountable(need.unit)) {
-    return Math.max(1, Math.ceil(need.quantity));
+// Decides how many product packs satisfy a need. Deterministic where the units
+// are comparable; `exact: false` signals the caller to fall back to the LLM.
+export function resolvePackages(amount: Amount, product: PackageLike): PackResolution {
+  const size = product.unitAmount;
+  const sizeUnit = product.unitAmountUnit;
+  switch (amount.kind) {
+    case "measured":
+      if (size !== null && size > 0 && sizeUnit === amount.measure) {
+        return { packs: Math.max(1, Math.ceil(amount.value / size)), exact: true };
+      }
+      return { packs: 1, exact: false };
+    case "count":
+      if (sizeUnit === "piece" && size !== null && size > 0) {
+        return { packs: Math.max(1, Math.ceil(amount.value / size)), exact: true };
+      }
+      return { packs: Math.max(1, Math.ceil(amount.value)), exact: true };
+    case "container":
+      return { packs: Math.max(1, Math.ceil(amount.value)), exact: true };
+    default:
+      return { packs: 1, exact: true };
   }
-  if (product.unitAmount === null || product.unitAmountUnit === null || product.unitAmount <= 0) {
-    return Math.max(1, Math.ceil(need.quantity));
-  }
-  const compatible =
-    (need.unit === "gram" && product.unitAmountUnit === "gram") ||
-    (need.unit === "ml" && product.unitAmountUnit === "ml");
-  if (!compatible) {
-    return Math.max(1, Math.ceil(need.quantity));
-  }
-  return Math.max(1, Math.ceil(need.quantity / product.unitAmount));
 }

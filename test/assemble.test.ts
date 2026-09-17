@@ -18,7 +18,7 @@ const llmPickingFirst: LlmClient = {
   async complete(messages) {
     const last = messages[messages.length - 1]?.content ?? "";
     const match = last.match(/-\s+([^:\s]+):/);
-    return JSON.stringify({ productId: match?.[1] ?? "" });
+    return JSON.stringify({ matches: [{ productId: match?.[1] ?? "", isGuess: false }] });
   },
 };
 
@@ -44,13 +44,27 @@ const recipe: RecipeWithIngredients = {
   title: "Reis mit Zwiebeln",
   tags: ["test"],
   ingredients: [
-    { id: "i1", recipeId: "r1", ingredientId: "zwiebel", quantity: 2, unit: "piece", altGroup: null },
-    { id: "i2", recipeId: "r1", ingredientId: "reis", quantity: 300, unit: "gram", altGroup: null },
+    {
+      id: "i1",
+      recipeId: "r1",
+      ingredientId: "zwiebel",
+      amount: { kind: "count", value: 2, item: "stueck" },
+      amountText: "2 Zwiebeln",
+      altGroup: null,
+    },
+    {
+      id: "i2",
+      recipeId: "r1",
+      ingredientId: "reis",
+      amount: { kind: "measured", value: 300, measure: "gram" },
+      amountText: "300 g",
+      altGroup: null,
+    },
   ],
 };
 
 const baseItems: BaseItem[] = [
-  { id: "b1", name: "Hafermilch", quantity: 2, unit: "package" },
+  { id: "b1", name: "Hafermilch", amount: { kind: "container", value: 2 } },
 ];
 
 describe("assembleCart", () => {

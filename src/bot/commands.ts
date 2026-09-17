@@ -22,7 +22,7 @@ import { extractBaseItems, extractRecipe } from "../planning/extract";
 import { selectRecipes } from "../planning/selector";
 import { routeIntent } from "./nl";
 import { clearPending, getPending, setPending, type Pending } from "./state";
-import { formatCartResult, formatRecipeList } from "./format";
+import { formatCartResult, formatIngredients, formatRecipeList } from "./format";
 
 const HELP_TEXT = [
   "Verfügbare Befehle:",
@@ -323,9 +323,9 @@ async function handlePendingText(
       },
     });
     await ctx.reply(
-      `Rezept "${recipe.title}" speichern?\nTags: ${recipe.tags.join(", ") || "–"}\nZutaten: ${
-        recipe.ingredients.length
-      }`,
+      `Rezept "${recipe.title}" speichern?\nTags: ${recipe.tags.join(", ") || "–"}\n\nZutaten:\n${formatIngredients(
+        recipe.ingredients,
+      )}`,
       { reply_markup: confirmKeyboard() },
     );
     return;
@@ -339,9 +339,12 @@ async function handlePendingText(
         updateRecipe(pending.recipeId, recipe.title, recipe.tags, recipe.ingredients);
       },
     });
-    await ctx.reply(`Rezept "${recipe.title}" aktualisieren?`, {
-      reply_markup: confirmKeyboard(),
-    });
+    await ctx.reply(
+      `Rezept "${recipe.title}" aktualisieren?\nTags: ${recipe.tags.join(", ") || "–"}\n\nZutaten:\n${formatIngredients(
+        recipe.ingredients,
+      )}`,
+      { reply_markup: confirmKeyboard() },
+    );
     return;
   }
   if (pending.kind === "edit_base" && pending.step === "describe") {
@@ -353,9 +356,12 @@ async function handlePendingText(
         replaceBaseItems(base.items);
       },
     });
-    await ctx.reply(`Grundsortiment mit ${base.items.length} Einträgen aktualisieren?`, {
-      reply_markup: confirmKeyboard(),
-    });
+    await ctx.reply(
+      `Grundsortiment mit ${base.items.length} Einträgen aktualisieren?\n\n${base.items
+        .map((item) => `${item.amountText} ${item.name}`)
+        .join("\n")}`,
+      { reply_markup: confirmKeyboard() },
+    );
     return;
   }
   if (pending.kind === "add_dont_buy" && pending.step === "describe") {

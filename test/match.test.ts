@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { bestByPrice, filterCandidates, isBlocked, pickBestMatch } from "../src/mapping/match";
+import {
+  bestByPrice,
+  chooseProduct,
+  filterCandidates,
+  isBlocked,
+  resolvePackagesWithLlm,
+} from "../src/mapping/match";
 import type { ProductCandidate } from "../src/grocery/types";
 import type { DontBuyItem } from "../src/db/repo";
 import type { LlmClient } from "../src/llm/types";
@@ -41,27 +47,66 @@ describe("bestByPrice", () => {
   });
 });
 
-describe("pickBestMatch", () => {
+describe("chooseProduct", () => {
   it("returns the single candidate without asking the LLM", async () => {
-    const only = product({ productId: "only" });
-    const result = await pickBestMatch(llmReturning("{}"), "reis", [only]);
-    expect(result?.product.productId).toBe("only");
-    expect(result?.isGuess).toBe(false);
+    const only = product({ productId: "only", unitAmount: 500, unitAmountUnit: "gram" });
+    const choice = await chooseProduct(
+      llmReturning("{}"),
+      { ingredientId: "reis", amount: { kind: "measured", value: 500, measure: "gram" }, amountText: "500 g" },
+      [only],
+    );
+    expect(choice?.product.productId).toBe("only");
+    expect(choice?.packs).toBe(1);
+    expect(choice?.isGuess).toBe(false);
   });
 
-  it("uses a valid LLM pick", async () => {
-    const llm = llmReturning('{"productId": "b", "isGuess": false}');
-    const candidates = [product({ productId: "a", price: 1 }), product({ productId: "b", price: 2 })];
-    const result = await pickBestMatch(llm, "reis", candidates);
-    expect(result?.product.productId).toBe("b");
-    expect(result?.isGuess).toBe(false);
+  it("picks the cheapest total among LLM-approved candidates", async () => {
+    const a = product({ productId: "a", price: 1, unitAmount: 500, unitAmountUnit: "gram" });
+    const b = product({ productId: "b", price: 1.5, unitAmount: 1000, unitAmountUnit: "gram" });
+    const llm = llmReturning('{"matches":[{"productId":"a","isGuess":false},{"productId":"b","isGuess":false}]}');
+    const choice = await chooseProduct(
+      llm,
+      { ingredientId: "reis", amount: { kind: "measured", value: 700, measure: "gram" }, amountText: "700 g" },
+      [a, b],
+    );
+    expect(choice?.product.productId).toBe("b");
+    expect(choice?.packs).toBe(1);
+    expect(choice?.total).toBeCloseTo(1.5);
   });
 
-  it("falls back to the cheapest candidate on an invalid LLM pick", async () => {
-    const llm = llmReturning('{"productId": "does-not-exist", "isGuess": false}');
-    const candidates = [product({ productId: "a", price: 1 }), product({ productId: "b", price: 2 })];
-    const result = await pickBestMatch(llm, "reis", candidates);
-    expect(result?.product.productId).toBe("a");
-    expect(result?.isGuess).toBe(true);
+  it("falls back to the cheapest candidate when the LLM returns nothing", async () => {
+    const a = product({ productId: "a", price: 2 });
+    const b = product({ productId: "b", price: 1 });
+    const choice = await chooseProduct(
+      llmReturning('{"matches":[]}'),
+      { ingredientId: "reis", amount: { kind: "unquantified" }, amountText: "etwas" },
+      [a, b],
+    );
+    expect(choice?.product.productId).toBe("b");
+    expect(choice?.isGuess).toBe(true);
+  });
+});
+
+describe("resolvePackagesWithLlm", () => {
+  it("uses the LLM estimate", async () => {
+    const llm = llmReturning('{"packs": 3}');
+    expect(
+      await resolvePackagesWithLlm(
+        llm,
+        { ingredientId: "x", amount: { kind: "measured", value: 300, measure: "gram" }, amountText: "300 g" },
+        product({}),
+      ),
+    ).toBe(3);
+  });
+
+  it("defaults to one pack on an invalid response", async () => {
+    const llm = llmReturning("not json");
+    expect(
+      await resolvePackagesWithLlm(
+        llm,
+        { ingredientId: "x", amount: { kind: "unquantified" }, amountText: "etwas" },
+        product({}),
+      ),
+    ).toBe(1);
   });
 });

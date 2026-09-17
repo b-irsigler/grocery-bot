@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parsePackageAmount, roundUpToPackages } from "../src/mapping/quantity";
+import { parsePackageAmount, resolvePackages } from "../src/mapping/quantity";
+import type { Amount } from "../src/amounts";
 
 describe("parsePackageAmount", () => {
   it("parses grams", () => {
@@ -27,27 +28,50 @@ describe("parsePackageAmount", () => {
   });
 });
 
-describe("roundUpToPackages", () => {
-  const product = (overrides: Partial<{ unitAmount: number | null; unitAmountUnit: "gram" | "ml" | "piece" | null }> = {}) => ({
+describe("resolvePackages", () => {
+  const product = (
+    overrides: Partial<{ unitAmount: number | null; unitAmountUnit: "gram" | "ml" | "piece" | null }> = {},
+  ) => ({
     unitAmount: 500 as number | null,
     unitAmountUnit: "gram" as "gram" | "ml" | "piece" | null,
     ...overrides,
   });
-
-  it("rounds weight up to package multiples", () => {
-    expect(roundUpToPackages({ quantity: 700, unit: "gram" }, product())).toBe(2);
-    expect(roundUpToPackages({ quantity: 500, unit: "gram" }, product())).toBe(1);
+  const measured = (value: number, measure: "gram" | "ml"): Amount => ({
+    kind: "measured",
+    value,
+    measure,
   });
 
-  it("rounds countable needs up to whole items", () => {
+  it("rounds measured needs up to package multiples", () => {
+    expect(resolvePackages(measured(700, "gram"), product())).toEqual({ packs: 2, exact: true });
+    expect(resolvePackages(measured(500, "gram"), product())).toEqual({ packs: 1, exact: true });
     expect(
-      roundUpToPackages({ quantity: 2.2, unit: "piece" }, product({ unitAmount: null, unitAmountUnit: null })),
-    ).toBe(3);
+      resolvePackages(measured(750, "ml"), product({ unitAmount: 500, unitAmountUnit: "ml" })),
+    ).toEqual({ packs: 2, exact: true });
   });
 
-  it("falls back to one package when size is unknown", () => {
+  it("flags mismatched or unknown sizes as inexact", () => {
     expect(
-      roundUpToPackages({ quantity: 300, unit: "gram" }, product({ unitAmount: null, unitAmountUnit: null })),
-    ).toBe(300);
+      resolvePackages(measured(300, "gram"), product({ unitAmount: null, unitAmountUnit: null })),
+    ).toEqual({ packs: 1, exact: false });
+    expect(resolvePackages(measured(300, "ml"), product())).toEqual({ packs: 1, exact: false });
+  });
+
+  it("rounds counts, using piece size when known", () => {
+    expect(
+      resolvePackages({ kind: "count", value: 2, item: "ei" }, product({ unitAmount: null, unitAmountUnit: null })),
+    ).toEqual({ packs: 2, exact: true });
+    expect(
+      resolvePackages({ kind: "count", value: 7, item: "ei" }, product({ unitAmount: 6, unitAmountUnit: "piece" })),
+    ).toEqual({ packs: 2, exact: true });
+  });
+
+  it("rounds containers up to whole packs", () => {
+    expect(resolvePackages({ kind: "container", value: 0.5 }, product())).toEqual({ packs: 1, exact: true });
+    expect(resolvePackages({ kind: "container", value: 2 }, product())).toEqual({ packs: 2, exact: true });
+  });
+
+  it("uses one pack for unquantified needs", () => {
+    expect(resolvePackages({ kind: "unquantified" }, product())).toEqual({ packs: 1, exact: true });
   });
 });
