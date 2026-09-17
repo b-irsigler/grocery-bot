@@ -1,0 +1,12 @@
+# AI tool ignore file (gitignore syntax) — read by .aiignore-aware assistants.
+# Secrets and credentials must never be read by AI agents.
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Keys and credentials
+*.pem
+*.key
+secrets.*
