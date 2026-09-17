@@ -10,7 +10,7 @@ export interface RecipeSummary {
 
 const SelectionSchema = z.object({
   recipeIds: z.array(z.string()).min(1),
-  reasoning: z.string().default(""),
+  reasoning: z.string(),
 });
 
 export function buildSelectionMessages(

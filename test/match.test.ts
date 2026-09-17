@@ -50,7 +50,7 @@ describe("pickBestMatch", () => {
   });
 
   it("uses a valid LLM pick", async () => {
-    const llm = llmReturning('{"productId": "b"}');
+    const llm = llmReturning('{"productId": "b", "isGuess": false}');
     const candidates = [product({ productId: "a", price: 1 }), product({ productId: "b", price: 2 })];
     const result = await pickBestMatch(llm, "reis", candidates);
     expect(result?.product.productId).toBe("b");
@@ -58,7 +58,7 @@ describe("pickBestMatch", () => {
   });
 
   it("falls back to the cheapest candidate on an invalid LLM pick", async () => {
-    const llm = llmReturning('{"productId": "does-not-exist"}');
+    const llm = llmReturning('{"productId": "does-not-exist", "isGuess": false}');
     const candidates = [product({ productId: "a", price: 1 }), product({ productId: "b", price: 2 })];
     const result = await pickBestMatch(llm, "reis", candidates);
     expect(result?.product.productId).toBe("a");

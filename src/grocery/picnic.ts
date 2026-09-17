@@ -5,6 +5,7 @@ import {
 } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { config } from "../config";
+import { PicnicAuthError, isPicnicAuthFailure } from "./auth";
 import { extractJsonPayload, findProductArray, textFromResult } from "./mcp";
 import { normalizePicnicProduct } from "./normalize";
 import type { GroceryClient, ProductCandidate } from "./types";
@@ -35,10 +36,14 @@ export async function createPicnicClient(): Promise<GroceryClient> {
 
   async function callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
     const result = await mcp.callTool({ name, arguments: args });
+    const text = textFromResult(result);
     if ((result as { isError?: boolean }).isError) {
+      if (isPicnicAuthFailure(text)) {
+        throw new PicnicAuthError(`Picnic-Anmeldung erforderlich bei ${name}.`);
+      }
       throw new Error(`Picnic MCP Fehler bei ${name}.`);
     }
-    return extractJsonPayload(textFromResult(result));
+    return extractJsonPayload(text);
   }
 
   return {

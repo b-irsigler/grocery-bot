@@ -154,10 +154,18 @@ PICNIC_MCP_ARGS=-y mcp-picnic@1.15.1
   access. To pre-warm the cache: `npx -y mcp-picnic@1.15.1 --version`.
 - Pin the version in `PICNIC_MCP_ARGS` (as above) to keep behavior reproducible.
 - Picnic supports `DE` and `NL` for `PICNIC_COUNTRY_CODE`.
-- If the account has 2FA enabled, automatic login may require a one-time
-  verification code that the bot cannot prompt for. Either disable 2FA for the
-  account or complete the 2FA flow once with another MCP client (for example the
-  MCP inspector) so a session is cached.
+- If the account has 2FA enabled, authorize a session once with the helper:
+
+  ```sh
+  npm run picnic:auth              # requests an SMS code and prompts for it
+  npm run picnic:auth -- --manual  # skip SMS, enter an authenticator-app code
+  ```
+
+  After successful verification the authorized session is cached in
+  `$HOME/.picnic-session.json` and reused by the bot, so 2FA is not requested
+  again until that session expires (re-run the helper if it does). The helper and
+  the bot must share the same `$HOME`; when running the bot in Docker, persist
+  `~/.picnic-session.json` and `~/.picnic-device.json` on a volume.
 - Product IDs are provider-specific. The dont-buy list stores an optional ID;
   entries created with `/add_dont_buy` are name-based and work across providers.
   After switching providers, a Knuspr-specific ID entry would not match a Picnic
@@ -185,6 +193,7 @@ docker compose up -d --build
 npm run typecheck   # tsc --noEmit
 npm test            # vitest run
 npm run mcp:check   # print the configured provider's MCP tools/list
+npm run picnic:auth # authorize a Picnic session via 2FA (one-time)
 ```
 
 See [WORKFLOW.md](WORKFLOW.md) for the two-model planning workflow used to

@@ -30,7 +30,7 @@ const IngredientSchema = z.object({
 
 const RecipeSchema = z.object({
   title: z.string().min(1),
-  tags: z.array(z.string()).default([]),
+  tags: z.array(z.string()),
   ingredients: z.array(IngredientSchema).min(1),
 });
 

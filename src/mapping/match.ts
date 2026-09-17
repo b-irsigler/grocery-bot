@@ -6,7 +6,7 @@ import type { DontBuyItem } from "../db/repo";
 
 const MatchSchema = z.object({
   productId: z.string(),
-  isGuess: z.boolean().default(false),
+  isGuess: z.boolean(),
 });
 
 export function isBlocked(product: ProductCandidate, dontBuy: DontBuyItem[]): boolean {

@@ -11,7 +11,8 @@
     "start": "tsx src/bot/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "mcp:check": "tsx scripts/mcp-check.ts"
+    "mcp:check": "tsx scripts/mcp-check.ts",
+    "picnic:auth": "tsx scripts/picnic-auth.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",

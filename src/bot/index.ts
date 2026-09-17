@@ -1,6 +1,7 @@
 import { Bot } from "grammy";
 import { config } from "../config";
 import { migrate } from "../db/index";
+import { PicnicAuthError } from "../grocery/auth";
 import { createLlmClient } from "../llm/client";
 import { requireAllowedChat } from "./access";
 import { registerCommandHandlers } from "./commands";
@@ -13,9 +14,11 @@ async function main(): Promise<void> {
   registerCommandHandlers(bot, llm);
   bot.catch((error) => {
     console.error("Bot-Fehler:", error.error);
-    void error.ctx
-      .reply("Es ist ein Fehler aufgetreten. Bitte versuche es erneut.")
-      .catch(() => undefined);
+    const message =
+      error.error instanceof PicnicAuthError
+        ? 'Picnic-Anmeldung/2FA erforderlich. Bitte einmalig "npm run picnic:auth" ausführen und den Code eingeben.'
+        : "Es ist ein Fehler aufgetreten. Bitte versuche es erneut.";
+    void error.ctx.reply(message).catch(() => undefined);
   });
   await bot.api.setMyCommands([
     { command: "start", description: "Wochenplan und Warenkorb erstellen" },

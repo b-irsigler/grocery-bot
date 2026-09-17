@@ -12,12 +12,12 @@ const pool = [
 
 describe("selectRecipes", () => {
   it("filters ids that are not in the pool and de-duplicates", async () => {
-    const llm = llmReturning('{"recipeIds": ["a", "zzz", "a", "b"]}');
+    const llm = llmReturning('{"recipeIds": ["a", "zzz", "a", "b"], "reasoning": ""}');
     expect(await selectRecipes(llm, pool, 2)).toEqual(["a", "b"]);
   });
 
   it("throws when no valid id is returned", async () => {
-    const llm = llmReturning('{"recipeIds": ["zzz"]}');
+    const llm = llmReturning('{"recipeIds": ["zzz"], "reasoning": ""}');
     await expect(selectRecipes(llm, pool, 1)).rejects.toThrow();
   });
 });
