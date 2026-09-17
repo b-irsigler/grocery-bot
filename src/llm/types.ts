@@ -3,6 +3,11 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface CompleteOptions {
+  temperature?: number;
+  responseFormat?: unknown;
+}
+
 export interface LlmClient {
-  complete(messages: ChatMessage[], options?: { temperature?: number }): Promise<string>;
+  complete(messages: ChatMessage[], options?: CompleteOptions): Promise<string>;
 }

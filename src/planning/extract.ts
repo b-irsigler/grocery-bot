@@ -1,13 +1,31 @@
 import { z } from "zod";
-import { UNITS } from "../units";
+import { UNITS, normalizeUnit } from "../units";
 import { completeJson } from "../llm/json";
+import { nullify } from "../util/normalize";
 import type { ChatMessage, LlmClient } from "../llm/types";
+
+function coerceQuantity(value: unknown): unknown {
+  if (typeof value === "number") {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value.replace(",", "."));
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return value;
+}
+
+const UnitSchema = z.preprocess(normalizeUnit, z.enum(UNITS));
+const QuantitySchema = z.preprocess(coerceQuantity, z.number().positive());
+const NullableStringSchema = z.preprocess(nullify, z.string().nullable().default(null));
 
 const IngredientSchema = z.object({
   ingredientId: z.string().min(1),
-  quantity: z.number().positive(),
-  unit: z.enum(UNITS),
-  altGroup: z.string().nullable().default(null),
+  quantity: QuantitySchema,
+  unit: UnitSchema,
+  altGroup: NullableStringSchema,
 });
 
 const RecipeSchema = z.object({
@@ -23,7 +41,11 @@ export async function extractRecipe(llm: LlmClient, text: string): Promise<Extra
     {
       role: "system",
       content:
-        "Du extrahierst Rezepte aus deutschen Beschreibungen. ingredientId ist ein kebab-case deutscher Zutatenname. Antworte NUR mit JSON.",
+        "Du extrahierst Rezepte aus deutschen Beschreibungen. ingredientId ist ein kebab-case deutscher Zutatenname. " +
+        "Erlaubte Einheiten sind piece, clove, gram, ml, package. " +
+        "Ordne deutsche Angaben zu: EL/Esslöffel → ml, TL/Teelöffel → ml, g/Gramm → gram, " +
+        "Prise/Stück/Scheibe → piece, Zehe/Zehen → clove, Packung/Dose/Glas/Beutel/Bund → package. " +
+        "Antworte NUR mit JSON.",
     },
     {
       role: "user",
@@ -42,8 +64,8 @@ const BaseSchema = z.object({
     .array(
       z.object({
         name: z.string().min(1),
-        quantity: z.number().positive(),
-        unit: z.enum(UNITS),
+        quantity: QuantitySchema,
+        unit: UnitSchema,
       }),
     )
     .min(1),
@@ -56,7 +78,11 @@ export async function extractBaseItems(llm: LlmClient, text: string): Promise<Ex
     {
       role: "system",
       content:
-        "Du extrahierst eine Grundsortiment-Liste aus deutschen Beschreibungen. Antworte NUR mit JSON.",
+        "Du extrahierst eine Grundsortiment-Liste aus deutschen Beschreibungen. " +
+        "Erlaubte Einheiten sind piece, clove, gram, ml, package. " +
+        "Ordne deutsche Angaben zu: EL/Esslöffel → ml, TL/Teelöffel → ml, g/Gramm → gram, " +
+        "Prise/Stück/Scheibe → piece, Zehe/Zehen → clove, Packung/Dose/Glas/Beutel/Bund → package. " +
+        "Antworte NUR mit JSON.",
     },
     {
       role: "user",

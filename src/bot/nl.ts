@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { completeJson } from "../llm/json";
+import { nullify } from "../util/normalize";
 import type { ChatMessage, LlmClient } from "../llm/types";
 
 export const INTENTS = [
@@ -19,7 +20,7 @@ export type Intent = (typeof INTENTS)[number];
 
 const IntentSchema = z.object({
   intent: z.enum(INTENTS),
-  argument: z.string().nullable().default(null),
+  argument: z.preprocess(nullify, z.string().nullable().default(null)),
 });
 
 export async function routeIntent(

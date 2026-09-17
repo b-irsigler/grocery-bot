@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { zodResponseFormat } from "openai/helpers/zod";
 import type { ChatMessage, LlmClient } from "./types";
 
 function extractJson(text: string): string {
@@ -20,15 +21,43 @@ function extractJson(text: string): string {
   return trimmed;
 }
 
+type ParseFailure = { ok: false; kind: "json" | "schema"; detail: string };
+type ParseResult<T> = { ok: true; value: T } | ParseFailure;
+
 function tryParse<T>(
   schema: z.ZodType<T, z.ZodTypeDef, unknown>,
   text: string,
-): { ok: true; value: T } | { ok: false } {
+): ParseResult<T> {
+  let parsed: unknown;
   try {
-    return { ok: true, value: schema.parse(JSON.parse(extractJson(text))) };
-  } catch {
-    return { ok: false };
+    parsed = JSON.parse(extractJson(text));
+  } catch (error) {
+    return {
+      ok: false,
+      kind: "json",
+      detail: error instanceof Error ? error.message : String(error),
+    };
   }
+  const result = schema.safeParse(parsed);
+  if (result.success) {
+    return { ok: true, value: result.data };
+  }
+  return {
+    ok: false,
+    kind: "schema",
+    detail: JSON.stringify(result.error.issues),
+  };
+}
+
+function describe(failure: ParseFailure): string {
+  return failure.kind === "json"
+    ? `ungültiges JSON (${failure.detail})`
+    : `Schema-Verstoß (${failure.detail})`;
+}
+
+function excerpt(text: string): string {
+  const collapsed = text.replace(/\s+/g, " ").trim();
+  return collapsed.length > 500 ? `${collapsed.slice(0, 500)}…` : collapsed;
 }
 
 export async function completeJson<T>(
@@ -37,7 +66,11 @@ export async function completeJson<T>(
   messages: ChatMessage[],
   options?: { temperature?: number },
 ): Promise<T> {
-  const first = await llm.complete(messages, options);
+  const requestOptions = {
+    ...options,
+    responseFormat: zodResponseFormat(schema, "response"),
+  };
+  const first = await llm.complete(messages, requestOptions);
   const firstParsed = tryParse(schema, first);
   if (firstParsed.ok) {
     return firstParsed.value;
@@ -47,10 +80,15 @@ export async function completeJson<T>(
     { role: "assistant", content: first },
     { role: "user", content: "Antworte NUR mit gültigem JSON, ohne Erklärungen und ohne Markdown." },
   ];
-  const second = await llm.complete(retryMessages, { temperature: 0 });
+  const second = await llm.complete(retryMessages, { ...requestOptions, temperature: 0 });
   const secondParsed = tryParse(schema, second);
   if (secondParsed.ok) {
     return secondParsed.value;
   }
-  throw new Error("Die KI-Antwort konnte nicht als JSON gelesen werden.");
+  const detail = [
+    `Erster Versuch: ${describe(firstParsed)} | Antwort: ${excerpt(first)}`,
+    `Zweiter Versuch: ${describe(secondParsed)} | Antwort: ${excerpt(second)}`,
+  ].join("\n");
+  console.error("completeJson fehlgeschlagen:\n" + detail);
+  throw new Error(`Die KI-Antwort konnte nicht als JSON gelesen werden.\n${detail}`);
 }

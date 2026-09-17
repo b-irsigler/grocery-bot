@@ -14,4 +14,12 @@ describe("routeIntent", () => {
     const llm = llmReturning('{"intent": "launch_missiles", "argument": null}');
     await expect(routeIntent(llm, "hallo")).rejects.toThrow();
   });
+
+  it("treats an empty or literal null argument as null", async () => {
+    const llm = llmReturning('{"intent": "list_dont_buy", "argument": "null"}');
+    expect(await routeIntent(llm, "was steht auf der liste")).toEqual({
+      intent: "list_dont_buy",
+      argument: null,
+    });
+  });
 });
