@@ -22,7 +22,7 @@ import { extractBaseItems, extractRecipe } from "../planning/extract";
 import { selectRecipes } from "../planning/selector";
 import { routeIntent } from "./nl";
 import { clearPending, getPending, setPending, type Pending } from "./state";
-import { formatCartResult, formatIngredients, formatRecipeList } from "./format";
+import { chunkText, formatBaseItems, formatCartResult, formatIngredients, formatRecipeList } from "./format";
 
 const HELP_TEXT = [
   "Verfügbare Befehle:",
@@ -30,7 +30,9 @@ const HELP_TEXT = [
   "/add_recipe – Rezept hinzufügen (natürliche Sprache)",
   "/edit_recipe <Name> – Rezept bearbeiten",
   "/remove_recipe <Name> – Rezept entfernen",
+  "/list_recipes – Alle Rezepte anzeigen",
   "/edit_base – Grundsortiment bearbeiten",
+  "/list_base – Grundsortiment anzeigen",
   "/add_dont_buy <Produkt> – Produkt zur Nicht-kaufen-Liste hinzufügen",
   "/remove_dont_buy <Produkt> – Produkt von der Nicht-kaufen-Liste entfernen",
   "/list_dont_buy – Nicht-kaufen-Liste anzeigen",
@@ -54,10 +56,38 @@ function chatIdOf(ctx: Context): number | undefined {
   return ctx.chat?.id;
 }
 
+async function replyLong(ctx: Context, text: string): Promise<void> {
+  for (const chunk of chunkText(text)) {
+    await ctx.reply(chunk);
+  }
+}
+
+async function showRecipes(ctx: Context): Promise<void> {
+  const recipes = listRecipes();
+  if (recipes.length === 0) {
+    await ctx.reply("Es sind noch keine Rezepte vorhanden.");
+    return;
+  }
+  await replyLong(ctx, `Rezepte:\n${formatRecipeList(recipes)}`);
+}
+
+async function showBase(ctx: Context): Promise<void> {
+  const items = listBaseItems();
+  if (items.length === 0) {
+    await ctx.reply("Das Grundsortiment ist leer.");
+    return;
+  }
+  await replyLong(ctx, `Grundsortiment:\n${formatBaseItems(items)}`);
+}
+
 export function registerCommandHandlers(bot: Bot, llm: LlmClient): void {
   bot.command("help", async (ctx) => {
     await ctx.reply(HELP_TEXT);
   });
+
+  bot.command("list_recipes", showRecipes);
+
+  bot.command("list_base", showBase);
 
   bot.command("list_dont_buy", async (ctx) => {
     const items = listDontBuy();
@@ -442,6 +472,12 @@ async function dispatchIntent(
       });
       return;
     }
+    case "list_recipes":
+      await showRecipes(ctx);
+      return;
+    case "list_base":
+      await showBase(ctx);
+      return;
     case "list_dont_buy": {
       const items = listDontBuy();
       await ctx.reply(

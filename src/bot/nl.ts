@@ -8,7 +8,9 @@ export const INTENTS = [
   "add_recipe",
   "edit_recipe",
   "remove_recipe",
+  "list_recipes",
   "edit_base",
+  "list_base",
   "add_dont_buy",
   "remove_dont_buy",
   "list_dont_buy",
@@ -40,6 +42,8 @@ export async function routeIntent(
         `Ordne sie einer Absicht zu: ${INTENTS.join(", ")}. ` +
         '"start" = Essensplan erstellen (Argument: Anzahl Mahlzeiten). ' +
         '"edit_recipe"/"remove_recipe" = Rezeptname als Argument. ' +
+        '"list_recipes" = Rezepte anzeigen. ' +
+        '"list_base" = Grundsortiment anzeigen. ' +
         '"add_dont_buy"/"remove_dont_buy" = Produktname als Argument. ' +
         '"none" = keine passende Absicht. ' +
         'Antworte: {"intent": "...", "argument": "..."}',

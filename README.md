@@ -6,9 +6,10 @@ matching grocery cart on a delivery service — [Knuspr](https://www.knuspr.de) 
 and check out.
 
 The bot picks a diverse set of recipes from a personal recipe pool, aggregates
-ingredients across recipes (conventional math, no LLM), maps them to real
-products via the configured MCP server, adds a weekly base assortment, respects
-a dont-buy list, and shares the finished cart in the chat.
+ingredients across recipes, decides how many packs to buy (deterministically
+where units are comparable, with an LLM estimate only for ambiguous amounts),
+maps them to real products via the configured MCP server, adds a weekly base
+assortment, respects a dont-buy list, and shares the finished cart in the chat.
 
 The delivery provider is pluggable and selected with `GROCERY_PROVIDER`
 (`knuspr` or `picnic`); one provider is active at a time.
@@ -40,9 +41,11 @@ live in [ARCHITECTURE.md](ARCHITECTURE.md).
 2. Set the weekly base assortment (milk, bread, etc.) with `/edit_base`.
 3. Optionally add products that should never end up in the cart with
    `/add_dont_buy`.
+4. Review what is stored at any time with `/list_recipes` and `/list_base`.
 
 Every command also works in natural language. All changes are confirmed via
-inline buttons before they are applied.
+inline buttons before they are applied; for recipes the confirmation shows the
+ingredients as the bot parsed them so you can catch mistakes before saving.
 
 ### Weekly routine
 
@@ -51,9 +54,10 @@ inline buttons before they are applied.
    ✅ Übernehmen, ✏️ Ändern, ❌ Abbrechen.
 3. Choose ✏️ Ändern and type what you want different in plain German to get
    a new proposal.
-4. On ✅ Übernehmen, the bot fills the provider cart: cheaper products and deals
-   are preferred, the dont-buy list is respected, and uncertain product
-   matches are flagged in the summary it posts.
+4. On ✅ Übernehmen, the bot fills the provider cart: among suitable products the
+   cheapest total (including the number of packs needed) is preferred, the
+   dont-buy list is respected, and uncertain product matches are flagged in the
+   summary it posts.
 5. Review the cart in the Knuspr/Picnic app and check out with your payment
    method — the bot never places the order itself.
 
@@ -65,7 +69,9 @@ inline buttons before they are applied.
 | `/add_recipe` | Add a recipe (described in natural language) |
 | `/edit_recipe <Name>` | Edit a recipe |
 | `/remove_recipe <Name>` | Remove a recipe |
+| `/list_recipes` | Show all recipes |
 | `/edit_base` | Edit the weekly base assortment |
+| `/list_base` | Show the weekly base assortment |
 | `/add_dont_buy <Produkt>` | Never put this product in the cart |
 | `/remove_dont_buy <Produkt>` | Remove a product from the dont-buy list |
 | `/list_dont_buy` | Show the dont-buy list |
@@ -78,8 +84,10 @@ inline buttons before they are applied.
 
 - Node.js >= 22
 - A Telegram bot token ([@BotFather](https://t.me/BotFather))
-- An API key for any OpenAI-compatible chat-completions endpoint
-  (e.g. OpenAI or Scaleway Generative APIs)
+- An API key for an OpenAI-compatible chat-completions endpoint (e.g. OpenAI or
+  Scaleway Generative APIs). The model should support structured outputs
+  (`response_format` with a JSON schema) — the bot sends one with every LLM
+  request to get reliable JSON back.
 - Knuspr account credentials (when `GROCERY_PROVIDER=knuspr`) or Picnic account
   credentials (when `GROCERY_PROVIDER=picnic`)
 

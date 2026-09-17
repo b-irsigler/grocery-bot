@@ -22,4 +22,13 @@ describe("routeIntent", () => {
       argument: null,
     });
   });
+
+  it("routes the listing intents", async () => {
+    expect(
+      await routeIntent(llmReturning('{"intent": "list_recipes", "argument": null}'), "zeig alle rezepte"),
+    ).toEqual({ intent: "list_recipes", argument: null });
+    expect(
+      await routeIntent(llmReturning('{"intent": "list_base", "argument": null}'), "was ist im grundsortiment"),
+    ).toEqual({ intent: "list_base", argument: null });
+  });
 });
